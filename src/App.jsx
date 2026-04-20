@@ -167,7 +167,20 @@ export default function App() {
         {/* Page content */}
         {activeTab === 'operative' && <OperativePage  data={analysisData} />}
         {activeTab === 'brand'     && <BrandHealthPage data={analysisData} />}
-      </main>
+   </main>
+
+      {/* Footer */}
+      <footer style={{
+        borderTop: '1px solid var(--border)',
+        padding: '20px 24px',
+        textAlign: 'center',
+        color: 'var(--text-muted)',
+        fontFamily: 'var(--font-mono)',
+        fontSize: '12px',
+        marginTop: 'auto',
+      }}>
+        Visibility Radar · 2026 by Camilo Soler
+      </footer>
     </div>
   );
 }

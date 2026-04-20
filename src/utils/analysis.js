@@ -12,57 +12,60 @@ export function parseNumber(str) {
 
 export function parseDate(str) {
   if (!str) return null;
-  // Format: D/MM/YYYY or DD/MM/YYYY
-  const parts = str.trim().split('/');
-  if (parts.length !== 3) return null;
-  const [d, m, y] = parts;
-  return new Date(parseInt(y), parseInt(m) - 1, parseInt(d));
+  const s = str.trim();
+  const mdy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (mdy) {
+    const [_, a, b, y] = mdy;
+    const first = parseInt(a), second = parseInt(b);
+    if (first <= 12 && second > 12) return new Date(parseInt(y), first - 1, second);
+    if (first > 12 && second <= 12) return new Date(parseInt(y), second - 1, first);
+    return new Date(parseInt(y), first - 1, second); // ambiguous → M/DD/YYYY
+  }
+  return null;
 }
 
 export function formatDate(date) {
   if (!date) return '';
   const d = date.getDate().toString().padStart(2, '0');
   const m = (date.getMonth() + 1).toString().padStart(2, '0');
-  const y = date.getFullYear();
-  return `${d}/${m}/${y}`;
+  return `${d}/${m}/${date.getFullYear()}`;
 }
 
 export function formatWeekLabel(date) {
   if (!date) return '';
-  const d = date.getDate().toString().padStart(2, '0');
-  const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-  return `${d} ${months[date.getMonth()]}`;
+  const months = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+  return `${date.getDate().toString().padStart(2,'0')} ${months[date.getMonth()]}`;
 }
 
-// ─── Column name mapping ──────────────────────────────────────────────────────
+// ─── Column mapping ───────────────────────────────────────────────────────────
 
 export const COL = {
-  semana:          'Semana',
-  campana:         'Campaña',
-  impresiones:     'Impr.',
-  moneda:          'Código de moneda',
-  coste:           'Coste',
-  is:              'Cuota de impr. de búsqueda',
-  isTop:           'Cuota impr. de parte sup. de búsqueda',
-  isAbsTop:        'Cuota impr. parte sup. absoluta de Búsqueda',
-  lostBudget:      '% impr. perdidas de búsq. (presup.)',
-  lostTopBudget:   'Cuota impr. perdidas de parte sup. de búsqueda (presupuesto)',
-  lostAbsTopBudget:'Cuota impr. perdidas de parte sup. abs. de búsqueda (presupuesto)',
-  lostRank:        'Cuota impr. perd. de búsq. (ranking)',
-  lostTopRank:     'Cuota impr. perdidas de parte sup. de búsqueda (ranking)',
-  lostAbsTopRank:  'Cuota impr. perdidas de parte sup. abs. de búsqueda (ranking)',
+  semana:           'Semana',
+  campana:          'Campaña',
+  impresiones:      'Impr.',
+  moneda:           'Código de moneda',
+  coste:            'Coste',
+  is:               'Cuota de impr. de búsqueda',
+  isTop:            'Cuota impr. de parte sup. de búsqueda',
+  isAbsTop:         'Cuota impr. parte sup. absoluta de Búsqueda',
+  lostBudget:       '% impr. perdidas de búsq. (presup.)',
+  lostTopBudget:    'Cuota impr. perdidas de parte sup. de búsqueda (presupuesto)',
+  lostAbsTopBudget: 'Cuota impr. perdidas de parte sup. abs. de búsqueda (presupuesto)',
+  lostRank:         'Cuota impr. perd. de búsq. (ranking)',
+  lostTopRank:      'Cuota impr. perdidas de parte sup. de búsqueda (ranking)',
+  lostAbsTopRank:   'Cuota impr. perdidas de parte sup. abs. de búsqueda (ranking)',
 };
 
 export const KPI_LABELS = {
-  is:         'Cuota Imp. Búsqueda',
-  isTop:      'Cuota Imp. Parte Sup.',
-  isAbsTop:   'Cuota Imp. Abs. Top',
-  lostRank:   'Imp. Perd. (Ranking)',
-  coste:      'Coste',
-  impresiones:'Impresiones',
+  is:          'Cuota Imp. Búsqueda',
+  isTop:       'Cuota Imp. Parte Sup.',
+  isAbsTop:    'Cuota Imp. Abs. Top',
+  lostRank:    'Imp. Perd. (Ranking)',
+  coste:       'Coste',
+  impresiones: 'Impresiones',
 };
 
-// ─── Parse raw rows from XLSX/CSV ─────────────────────────────────────────────
+// ─── Parse rows ───────────────────────────────────────────────────────────────
 
 export function parseRows(rawRows) {
   return rawRows
@@ -88,64 +91,136 @@ export function parseRows(rawRows) {
     .sort((a, b) => a.semanaDate - b.semanaDate);
 }
 
-// ─── Compute averages for a set of rows ───────────────────────────────────────
+// ─── Weighted averages ────────────────────────────────────────────────────────
 
+// IS Búsqueda: Σ Impr / Σ(Impr ÷ IS)
+function weightedAvgIS(rows) {
+  const valid = rows.filter(r =>
+    r.impresiones > 0 && r.is !== null && r.is > 0
+  );
+  if (!valid.length) return null;
+  const totalImpr = valid.reduce((s, r) => s + r.impresiones, 0);
+  const totalElig = valid.reduce((s, r) => s + (r.impresiones / (r.is / 100)), 0);
+  return totalElig > 0 ? (totalImpr / totalElig) * 100 : null;
+}
+
+// IS Abs Top: Σ(Impr × IS_AT) / Σ Impr  — Método B validado
+function weightedAvgIsAbsTop(rows) {
+  const valid = rows.filter(r =>
+    r.impresiones > 0 && r.isAbsTop !== null && r.isAbsTop > 0
+  );
+  if (!valid.length) return null;
+  const totalNum  = valid.reduce((s, r) => s + r.impresiones * (r.isAbsTop / 100), 0);
+  const totalImpr = valid.reduce((s, r) => s + r.impresiones, 0);
+  return totalImpr > 0 ? (totalNum / totalImpr) * 100 : null;
+}
+
+// IS Top (Parte Superior): Σ(Impr × IS_Top) / Σ Impr  — mismo método que IS Abs Top
+function weightedAvgIsTop(rows) {
+  const valid = rows.filter(r =>
+    r.impresiones > 0 && r.isTop !== null && r.isTop > 0
+  );
+  if (!valid.length) return null;
+  const totalNum  = valid.reduce((s, r) => s + r.impresiones * (r.isTop / 100), 0);
+  const totalImpr = valid.reduce((s, r) => s + r.impresiones, 0);
+  return totalImpr > 0 ? (totalNum / totalImpr) * 100 : null;
+}
+
+// Simple average para KPIs no-IS
 function avg(rows, field) {
   const vals = rows.map(r => r[field]).filter(v => v !== null && v !== undefined);
   if (!vals.length) return null;
   return vals.reduce((a, b) => a + b, 0) / vals.length;
 }
 
-// ─── Main analysis function ───────────────────────────────────────────────────
+// ─── Main analysis ────────────────────────────────────────────────────────────
 
 export function analyzeData(rows) {
-  // Get sorted unique weeks
   const allDates = [...new Set(rows.map(r => r.semanaDate.getTime()))].sort((a, b) => a - b);
   const allWeeks = allDates.map(t => new Date(t));
   const lastWeekDate = allWeeks[allWeeks.length - 1];
-
-  // Group by campaign
   const campaigns = [...new Set(rows.map(r => r.campana))];
 
-  const kpiFields = ['is', 'isTop', 'isAbsTop', 'lostRank', 'coste', 'impresiones',
-                     'lostBudget', 'lostTopBudget', 'lostAbsTopBudget', 'lostTopRank', 'lostAbsTopRank'];
-
   const campaignData = campaigns.map(campana => {
-    const campRows = rows.filter(r => r.campana === campana)
+    const campRows = rows
+      .filter(r => r.campana === campana)
       .sort((a, b) => a.semanaDate - b.semanaDate);
 
-    const last8 = campRows.slice(-8);
-    const prev4 = campRows.slice(-5, -1); // 4 weeks before last
-    const lastRow = campRows[campRows.length - 1];
+    const lastRow      = campRows[campRows.length - 1];
+    const allWeeksRows = campRows;
+    const prev4Rows    = campRows.slice(-5, -1);
 
-    const stats = {};
-    kpiFields.forEach(field => {
-      const avg8  = avg(last8, field);
-      const avg4  = avg(prev4, field);
-      const lastVal = lastRow ? lastRow[field] : null;
-      const delta8  = (lastVal !== null && avg8  !== null) ? lastVal - avg8  : null;
-      const delta4  = (lastVal !== null && avg4  !== null) ? lastVal - avg4  : null;
-      stats[field] = { avg8, avg4, lastVal, delta8, delta4 };
-    });
+    // ── IS Búsqueda (ponderado por impresiones elegibles) ──
+    const isAvgAll = weightedAvgIS(allWeeksRows);
+    const isAvg4   = weightedAvgIS(prev4Rows);
+    const isLast   = lastRow?.is ?? null;
 
-    return {
-      campana,
-      lastWeek:   lastRow?.semana,
-      lastDate:   lastRow?.semanaDate,
-      stats,
-      history:    campRows,
-      lastRow,
+    // ── IS Abs Top (ponderado por impresiones × IS_AT) ──
+    const atAvgAll = weightedAvgIsAbsTop(allWeeksRows);
+    const atAvg4   = weightedAvgIsAbsTop(prev4Rows);
+    const atLast   = lastRow?.isAbsTop ?? null;
+
+    // ── IS Top Parte Superior (ponderado por impresiones × IS_Top) ──
+    const itAvgAll = weightedAvgIsTop(allWeeksRows);
+    const itAvg4   = weightedAvgIsTop(prev4Rows);
+    const itLast   = lastRow?.isTop ?? null;
+
+    const stats = {
+      is: {
+        lastVal: isLast,
+        avg8:    isAvgAll,
+        avg4:    isAvg4,
+        delta8:  isLast !== null && isAvgAll !== null ? isLast - isAvgAll : null,
+        delta4:  isLast !== null && isAvg4   !== null ? isLast - isAvg4   : null,
+      },
+      isAbsTop: {
+        lastVal: atLast,
+        avg8:    atAvgAll,
+        avg4:    atAvg4,
+        delta8:  atLast !== null && atAvgAll !== null ? atLast - atAvgAll : null,
+        delta4:  atLast !== null && atAvg4   !== null ? atLast - atAvg4   : null,
+      },
+      isTop: {
+        lastVal: itLast,
+        avg8:    itAvgAll,
+        avg4:    itAvg4,
+        delta8:  itLast !== null && itAvgAll !== null ? itLast - itAvgAll : null,
+        delta4:  itLast !== null && itAvg4   !== null ? itLast - itAvg4   : null,
+      },
+      lostRank: {
+        lastVal: lastRow?.lostRank ?? null,
+        avg8:    avg(allWeeksRows, 'lostRank'),
+        avg4:    avg(prev4Rows,    'lostRank'),
+        delta8:  lastRow?.lostRank !== null ? lastRow.lostRank - avg(allWeeksRows, 'lostRank') : null,
+        delta4:  lastRow?.lostRank !== null ? lastRow.lostRank - avg(prev4Rows,    'lostRank') : null,
+      },
+      coste: {
+        lastVal: lastRow?.coste ?? null,
+        avg8:    avg(allWeeksRows, 'coste'),
+        avg4:    avg(prev4Rows,    'coste'),
+        delta8:  null,
+        delta4:  null,
+      },
+      impresiones: {
+        lastVal: lastRow?.impresiones ?? null,
+        avg8:    avg(allWeeksRows, 'impresiones'),
+        avg4:    avg(prev4Rows,    'impresiones'),
+        delta8:  null,
+        delta4:  null,
+      },
     };
+
+    return { campana, lastWeek: lastRow?.semana, lastDate: lastRow?.semanaDate, stats, history: campRows, lastRow };
   });
 
-  // ── CONTROL SEMANAL OPERATIVO ─────────────────────────────────────────────
+  // ── ALERTAS OPERATIVAS ────────────────────────────────────────────────────
   const operativeAlerts = [];
 
   campaignData.forEach(cd => {
     const alerts = [];
     const { stats } = cd;
 
-    // Alert 1: IS drops > 10pp vs avg8
+    // IS Búsqueda cae > 10pp → ALERTA | > 20pp → CRÍTICO
     if (stats.is.delta8 !== null && stats.is.delta8 <= -10) {
       alerts.push({
         type:      'IS_DROP',
@@ -161,7 +236,7 @@ export function analyzeData(rows) {
       });
     }
 
-    // Alert 2: IS Abs Top drops > 15pp vs avg8
+    // IS Abs Top cae > 15pp → ALERTA | > 25pp → CRÍTICO
     if (stats.isAbsTop.delta8 !== null && stats.isAbsTop.delta8 <= -15) {
       alerts.push({
         type:      'IS_ABS_TOP_DROP',
@@ -186,11 +261,8 @@ export function analyzeData(rows) {
     }
   });
 
-  // Sort by severity then by worst delta
   operativeAlerts.sort((a, b) => {
-    if (a.maxSeverity !== b.maxSeverity) {
-      return a.maxSeverity === 'critical' ? -1 : 1;
-    }
+    if (a.maxSeverity !== b.maxSeverity) return a.maxSeverity === 'critical' ? -1 : 1;
     const aWorst = Math.min(...a.alerts.map(al => al.delta8));
     const bWorst = Math.min(...b.alerts.map(al => al.delta8));
     return aWorst - bWorst;
@@ -203,56 +275,36 @@ export function analyzeData(rows) {
 
     const conditions = [];
 
-    // IS < 85%
     if (lastRow.is !== null) {
       conditions.push({
-        kpi:       'is',
-        label:     'Cuota Imp. Búsqueda',
-        value:     lastRow.is,
-        threshold: 85,
-        operator:  '<',
-        pass:      lastRow.is >= 85,
-        severity:  lastRow.is < 70 ? 'critical' : 'warning',
+        kpi: 'is', label: 'Cuota Imp. Búsqueda',
+        value: lastRow.is, threshold: 85, operator: '<',
+        pass: lastRow.is >= 85,
+        severity: lastRow.is < 70 ? 'critical' : 'warning',
       });
     }
-
-    // IS Top < 60%
     if (lastRow.isTop !== null) {
       conditions.push({
-        kpi:       'isTop',
-        label:     'Cuota Imp. Parte Sup.',
-        value:     lastRow.isTop,
-        threshold: 60,
-        operator:  '<',
-        pass:      lastRow.isTop >= 60,
-        severity:  lastRow.isTop < 45 ? 'critical' : 'warning',
+        kpi: 'isTop', label: 'Cuota Imp. Parte Sup.',
+        value: lastRow.isTop, threshold: 60, operator: '<',
+        pass: lastRow.isTop >= 60,
+        severity: lastRow.isTop < 45 ? 'critical' : 'warning',
       });
     }
-
-    // Lost Rank > 10–15% (using 10 as threshold)
     if (lastRow.lostRank !== null) {
       conditions.push({
-        kpi:       'lostRank',
-        label:     'Imp. Perd. Ranking',
-        value:     lastRow.lostRank,
-        threshold: 10,
-        operator:  '>',
-        pass:      lastRow.lostRank <= 10,
-        severity:  lastRow.lostRank > 15 ? 'critical' : 'warning',
+        kpi: 'lostRank', label: 'Imp. Perd. Ranking',
+        value: lastRow.lostRank, threshold: 10, operator: '>',
+        pass: lastRow.lostRank <= 10,
+        severity: lastRow.lostRank > 15 ? 'critical' : 'warning',
       });
     }
 
-    const failed = conditions.filter(c => !c.pass);
+    const failed      = conditions.filter(c => !c.pass);
     const hasCritical = failed.some(c => c.severity === 'critical');
-    const status = failed.length === 0 ? 'ok' : hasCritical ? 'critical' : 'warning';
+    const status      = failed.length === 0 ? 'ok' : hasCritical ? 'critical' : 'warning';
 
-    return {
-      ...cd,
-      conditions,
-      failed,
-      status,
-      isWeakBrand: failed.length > 0,
-    };
+    return { ...cd, conditions, failed, status, isWeakBrand: failed.length > 0 };
   }).filter(Boolean);
 
   brandHealth.sort((a, b) => {
@@ -261,12 +313,8 @@ export function analyzeData(rows) {
   });
 
   return {
-    allWeeks,
-    lastWeekDate,
-    campaigns,
-    campaignData,
-    operativeAlerts,
-    brandHealth,
+    allWeeks, lastWeekDate, campaigns, campaignData,
+    operativeAlerts, brandHealth,
     totalCampaigns: campaigns.length,
     totalAlerts:    operativeAlerts.length,
     weakBrands:     brandHealth.filter(b => b.isWeakBrand).length,
@@ -305,7 +353,6 @@ export function deltaClass(val, inverse = false) {
   return 'delta-neu';
 }
 
-// IS-type KPI: higher is better. lostRank: lower is better
 export function kpiClass(val, kpi) {
   if (val === null || val === undefined) return 'kpi-neutral';
   if (kpi === 'lostRank' || kpi === 'lostBudget') {
@@ -313,8 +360,8 @@ export function kpiClass(val, kpi) {
     if (val <= 15) return 'kpi-warn';
     return 'kpi-bad';
   }
-  if (val >= 85)  return 'kpi-good';
-  if (val >= 60)  return 'kpi-warn';
+  if (val >= 85) return 'kpi-good';
+  if (val >= 60) return 'kpi-warn';
   return 'kpi-bad';
 }
 

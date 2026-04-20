@@ -157,6 +157,21 @@ export default function UploadPage({ onDataLoaded }) {
         Los archivos se procesan localmente · Sin envío de datos al servidor
       </p>
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
+      {/* Footer */}
+      <footer style={{
+        position: 'absolute',
+        bottom: 0,
+        width: '100%',
+        borderTop: '1px solid var(--border)',
+        padding: '20px 24px',
+        textAlign: 'center',
+        color: 'var(--text-muted)',
+        fontFamily: 'var(--font-mono)',
+        fontSize: '12px',
+      }}>
+        Visibility Radar · 2026 by Camilo Soler
+      </footer>
     </div>
   );
 }
