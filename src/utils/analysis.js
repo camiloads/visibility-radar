@@ -10,18 +10,43 @@ export function parseNumber(str) {
   return parseFloat(str.replace(/\./g, '').replace(',', '.').trim());
 }
 
-export function parseDate(str) {
+// ─── Smart date parser ────────────────────────────────────────────────────────
+// Detects D/MM/YYYY vs M/DD/YYYY automatically per file
+
+function detectDateFormat(rawDates) {
+  // If any first segment > 12 → must be D/MM/YYYY
+  // If any second segment > 12 → must be M/DD/YYYY
+  for (const s of rawDates) {
+    const parts = s.trim().split('/');
+    if (parts.length !== 3) continue;
+    const a = parseInt(parts[0]);
+    const b = parseInt(parts[1]);
+    if (a > 12) return 'DMY';
+    if (b > 12) return 'MDY';
+  }
+  // Ambiguous: count which interpretation gives more valid Monday dates
+  let dmyMondays = 0, mdyMondays = 0;
+  for (const s of rawDates) {
+    const parts = s.trim().split('/');
+    if (parts.length !== 3) continue;
+    const a = parseInt(parts[0]), b = parseInt(parts[1]), y = parseInt(parts[2]);
+    const dmy = new Date(y, b - 1, a);
+    const mdy = new Date(y, a - 1, b);
+    if (dmy.getDay() === 1) dmyMondays++;
+    if (mdy.getDay() === 1) mdyMondays++;
+  }
+  return dmyMondays >= mdyMondays ? 'DMY' : 'MDY';
+}
+
+export function parseDate(str, format) {
   if (!str) return null;
   const s = str.trim();
-  const mdy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (mdy) {
-    const [_, a, b, y] = mdy;
-    const first = parseInt(a), second = parseInt(b);
-    if (first <= 12 && second > 12) return new Date(parseInt(y), first - 1, second);
-    if (first > 12 && second <= 12) return new Date(parseInt(y), second - 1, first);
-    return new Date(parseInt(y), first - 1, second); // ambiguous → M/DD/YYYY
-  }
-  return null;
+  const parts = s.split('/');
+  if (parts.length !== 3) return null;
+  const a = parseInt(parts[0]), b = parseInt(parts[1]), y = parseInt(parts[2]);
+  if (isNaN(a) || isNaN(b) || isNaN(y)) return null;
+  if (format === 'DMY') return new Date(y, b - 1, a);
+  return new Date(y, a - 1, b); // MDY
 }
 
 export function formatDate(date) {
@@ -68,11 +93,17 @@ export const KPI_LABELS = {
 // ─── Parse rows ───────────────────────────────────────────────────────────────
 
 export function parseRows(rawRows) {
+  // Detect date format from all dates in the file
+  const allRawDates = rawRows
+    .map(r => r[COL.semana]?.toString().trim())
+    .filter(Boolean);
+  const dateFormat = detectDateFormat(allRawDates);
+
   return rawRows
     .filter(r => r[COL.campana] && r[COL.semana])
     .map(r => ({
       semana:           r[COL.semana]?.toString().trim(),
-      semanaDate:       parseDate(r[COL.semana]?.toString().trim()),
+      semanaDate:       parseDate(r[COL.semana]?.toString().trim(), dateFormat),
       campana:          r[COL.campana]?.toString().trim(),
       impresiones:      parseNumber(r[COL.impresiones]?.toString()),
       coste:            parseNumber(r[COL.coste]?.toString()),
@@ -93,44 +124,42 @@ export function parseRows(rawRows) {
 
 // ─── Weighted averages ────────────────────────────────────────────────────────
 
-// IS Búsqueda: Σ Impr / Σ(Impr ÷ IS)
 function weightedAvgIS(rows) {
-  const valid = rows.filter(r =>
-    r.impresiones > 0 && r.is !== null && r.is > 0
-  );
+  const valid = rows.filter(r => r.impresiones > 0 && r.is !== null && r.is > 0);
   if (!valid.length) return null;
   const totalImpr = valid.reduce((s, r) => s + r.impresiones, 0);
   const totalElig = valid.reduce((s, r) => s + (r.impresiones / (r.is / 100)), 0);
   return totalElig > 0 ? (totalImpr / totalElig) * 100 : null;
 }
 
-// IS Abs Top: Σ(Impr × IS_AT) / Σ Impr  — Método B validado
 function weightedAvgIsAbsTop(rows) {
-  const valid = rows.filter(r =>
-    r.impresiones > 0 && r.isAbsTop !== null && r.isAbsTop > 0
-  );
+  const valid = rows.filter(r => r.impresiones > 0 && r.isAbsTop !== null && r.isAbsTop > 0);
   if (!valid.length) return null;
   const totalNum  = valid.reduce((s, r) => s + r.impresiones * (r.isAbsTop / 100), 0);
   const totalImpr = valid.reduce((s, r) => s + r.impresiones, 0);
   return totalImpr > 0 ? (totalNum / totalImpr) * 100 : null;
 }
 
-// IS Top (Parte Superior): Σ(Impr × IS_Top) / Σ Impr  — mismo método que IS Abs Top
 function weightedAvgIsTop(rows) {
-  const valid = rows.filter(r =>
-    r.impresiones > 0 && r.isTop !== null && r.isTop > 0
-  );
+  const valid = rows.filter(r => r.impresiones > 0 && r.isTop !== null && r.isTop > 0);
   if (!valid.length) return null;
   const totalNum  = valid.reduce((s, r) => s + r.impresiones * (r.isTop / 100), 0);
   const totalImpr = valid.reduce((s, r) => s + r.impresiones, 0);
   return totalImpr > 0 ? (totalNum / totalImpr) * 100 : null;
 }
 
-// Simple average para KPIs no-IS
 function avg(rows, field) {
   const vals = rows.map(r => r[field]).filter(v => v !== null && v !== undefined);
   if (!vals.length) return null;
   return vals.reduce((a, b) => a + b, 0) / vals.length;
+}
+
+// Media impresiones últimas 4 semanas (incluyendo la última)
+function avgImpr4(rows) {
+  const last4 = rows.slice(-4);
+  const vals = last4.map(r => r.impresiones).filter(v => v !== null && v !== undefined);
+  if (!vals.length) return null;
+  return Math.round(vals.reduce((a, b) => a + b, 0) / vals.length);
 }
 
 // ─── Main analysis ────────────────────────────────────────────────────────────
@@ -150,20 +179,23 @@ export function analyzeData(rows) {
     const allWeeksRows = campRows;
     const prev4Rows    = campRows.slice(-5, -1);
 
-    // ── IS Búsqueda (ponderado por impresiones elegibles) ──
+    // IS Búsqueda — ponderado
     const isAvgAll = weightedAvgIS(allWeeksRows);
     const isAvg4   = weightedAvgIS(prev4Rows);
     const isLast   = lastRow?.is ?? null;
 
-    // ── IS Abs Top (ponderado por impresiones × IS_AT) ──
+    // IS Abs Top — ponderado Método B
     const atAvgAll = weightedAvgIsAbsTop(allWeeksRows);
     const atAvg4   = weightedAvgIsAbsTop(prev4Rows);
     const atLast   = lastRow?.isAbsTop ?? null;
 
-    // ── IS Top Parte Superior (ponderado por impresiones × IS_Top) ──
+    // IS Top — ponderado Método B
     const itAvgAll = weightedAvgIsTop(allWeeksRows);
     const itAvg4   = weightedAvgIsTop(prev4Rows);
     const itLast   = lastRow?.isTop ?? null;
+
+    // Media impresiones últimas 4 semanas (incl. última)
+    const imprMedia4S = avgImpr4(campRows);
 
     const stats = {
       is: {
@@ -198,19 +230,25 @@ export function analyzeData(rows) {
         lastVal: lastRow?.coste ?? null,
         avg8:    avg(allWeeksRows, 'coste'),
         avg4:    avg(prev4Rows,    'coste'),
-        delta8:  null,
-        delta4:  null,
+        delta8:  null, delta4: null,
       },
       impresiones: {
         lastVal: lastRow?.impresiones ?? null,
         avg8:    avg(allWeeksRows, 'impresiones'),
         avg4:    avg(prev4Rows,    'impresiones'),
-        delta8:  null,
-        delta4:  null,
+        delta8:  null, delta4: null,
       },
     };
 
-    return { campana, lastWeek: lastRow?.semana, lastDate: lastRow?.semanaDate, stats, history: campRows, lastRow };
+    return {
+      campana,
+      lastWeek:    lastRow?.semana,
+      lastDate:    lastRow?.semanaDate,
+      imprMedia4S,
+      stats,
+      history:     campRows,
+      lastRow,
+    };
   });
 
   // ── ALERTAS OPERATIVAS ────────────────────────────────────────────────────
@@ -220,7 +258,6 @@ export function analyzeData(rows) {
     const alerts = [];
     const { stats } = cd;
 
-    // IS Búsqueda cae > 10pp → ALERTA | > 20pp → CRÍTICO
     if (stats.is.delta8 !== null && stats.is.delta8 <= -10) {
       alerts.push({
         type:      'IS_DROP',
@@ -236,7 +273,6 @@ export function analyzeData(rows) {
       });
     }
 
-    // IS Abs Top cae > 15pp → ALERTA | > 25pp → CRÍTICO
     if (stats.isAbsTop.delta8 !== null && stats.isAbsTop.delta8 <= -15) {
       alerts.push({
         type:      'IS_ABS_TOP_DROP',
