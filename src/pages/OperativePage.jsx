@@ -18,7 +18,6 @@ function AlertCard({ entry, idx }) {
       className={`alert-card ${isCritical ? 'critical' : 'warning'} fade-in`}
       style={{ animationDelay: `${idx * 0.05}s` }}
     >
-      {/* Header */}
       <div
         style={{
           padding: '14px 18px',
@@ -61,7 +60,6 @@ function AlertCard({ entry, idx }) {
         </div>
       </div>
 
-      {/* Expanded detail */}
       {expanded && (
         <div style={{ borderTop: '1px solid var(--border)', padding: '16px 18px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -82,10 +80,10 @@ function AlertCard({ entry, idx }) {
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
                   {[
-                    { label: 'Última Semana', value: fmtPct(alert.lastVal), cls: kpiClass(alert.lastVal, alert.kpi), big: true },
-                    { label: 'Media 8 Semanas', value: fmtPct(alert.avg8), cls: 'kpi-neutral' },
-                    { label: 'Δ vs Media 8S', value: fmtDelta(alert.delta8), cls: deltaClass(alert.delta8, alert.kpi === 'lostRank') },
-                    { label: 'Δ vs Media 4S', value: fmtDelta(alert.delta4), cls: deltaClass(alert.delta4, alert.kpi === 'lostRank') },
+                    { label: 'Última Semana',    value: fmtPct(alert.lastVal),  cls: kpiClass(alert.lastVal, alert.kpi), big: true },
+                    { label: 'Media Ponderada Global', value: fmtPct(alert.avg8), cls: 'kpi-neutral' },
+                    { label: 'Δ vs Media Global', value: fmtDelta(alert.delta8), cls: deltaClass(alert.delta8, alert.kpi === 'lostRank') },
+                    { label: 'Δ vs Media 4S',     value: fmtDelta(alert.delta4), cls: deltaClass(alert.delta4, alert.kpi === 'lostRank') },
                   ].map((item, j) => (
                     <div key={j} style={{
                       background: 'var(--bg-card)', borderRadius: 'var(--radius-sm)',
@@ -112,10 +110,9 @@ function AlertCard({ entry, idx }) {
 export default function OperativePage({ data }) {
   const { operativeAlerts, campaignData, lastWeekDate, allWeeks } = data;
 
-  // Table sort state
   const [sortField, setSortField] = useState('is');
-  const [sortDir, setSortDir] = useState('asc');
-  const [tab, setTab] = useState('alerts'); // 'alerts' | 'table'
+  const [sortDir, setSortDir]     = useState('asc');
+  const [tab, setTab]             = useState('alerts');
 
   function handleSort(field) {
     if (sortField === field) {
@@ -130,7 +127,6 @@ export default function OperativePage({ data }) {
     ? `${lastWeekDate.getDate().toString().padStart(2, '0')}/${(lastWeekDate.getMonth() + 1).toString().padStart(2, '0')}/${lastWeekDate.getFullYear()}`
     : '—';
 
-  // Table data: last week per campaign, with stats
   const tableRows = [...campaignData].sort((a, b) => {
     let av = a.stats[sortField]?.lastVal ?? 0;
     let bv = b.stats[sortField]?.lastVal ?? 0;
@@ -229,15 +225,14 @@ export default function OperativePage({ data }) {
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {/* Legend */}
               <div style={{ display: 'flex', gap: 16, padding: '10px 14px', background: 'var(--bg-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)', marginBottom: 4 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <div className="dot dot-red" />
-                  <span className="mono" style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Caída IS Búsqueda &gt; 10pp vs media 8S</span>
+                  <span className="mono" style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Caída IS Búsqueda &gt; 10pp vs media global</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                   <div className="dot dot-yellow" />
-                  <span className="mono" style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Caída Abs. Top &gt; 15pp vs media 8S</span>
+                  <span className="mono" style={{ fontSize: 11, color: 'var(--text-secondary)' }}>Caída Abs. Top &gt; 15pp vs media global</span>
                 </div>
               </div>
               {operativeAlerts.map((entry, idx) => (
@@ -280,14 +275,15 @@ export default function OperativePage({ data }) {
                   <th className="sortable-th" onClick={() => handleSort('impresiones')}>
                     Impr. <SortIcon field="impresiones" sortField={sortField} sortDir={sortDir} />
                   </th>
-                  <th>Δ IS (8S)</th>
-                  <th>Δ AbsTop (8S)</th>
+                  <th>Media Impr. 4S</th>
+                  <th>Δ IS (Global)</th>
+                  <th>Δ AbsTop (Global)</th>
                   <th>Alertas</th>
                 </tr>
               </thead>
               <tbody>
                 {tableRows.map((cd, i) => {
-                  const hasAlert = operativeAlerts.some(a => a.campana === cd.campana);
+                  const hasAlert   = operativeAlerts.some(a => a.campana === cd.campana);
                   const alertEntry = operativeAlerts.find(a => a.campana === cd.campana);
                   return (
                     <tr key={cd.campana} style={{ background: hasAlert ? (alertEntry?.maxSeverity === 'critical' ? 'rgba(255,69,96,0.04)' : 'rgba(255,184,0,0.04)') : '' }}>
@@ -305,6 +301,11 @@ export default function OperativePage({ data }) {
                       </td>
                       <td style={{ color: 'var(--text-secondary)' }}>
                         {cd.stats.impresiones?.lastVal !== null ? Math.round(cd.stats.impresiones?.lastVal)?.toLocaleString('es-ES') : '—'}
+                      </td>
+                      <td style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)' }}>
+                        {cd.imprMedia4S !== null && cd.imprMedia4S !== undefined
+                          ? Math.round(cd.imprMedia4S).toLocaleString('es-ES')
+                          : '—'}
                       </td>
                       <td className={`mono ${deltaClass(cd.stats.is?.delta8)}`}>
                         {fmtDelta(cd.stats.is?.delta8)}
