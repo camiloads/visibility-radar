@@ -1,17 +1,23 @@
 import * as XLSX from 'xlsx';
-import { fmtPct, fmtNum, fmtInt, fmtDelta } from './analysis.js';
+import { fmtPct, fmtDelta } from './analysis.js';
 
-function pct(v) { return v !== null && v !== undefined ? v / 100 : null; }
-
-export function downloadReport({ operativeAlerts, brandHealth, allWeeks, lastWeekDate }) {
+export function downloadReport({ operativeAlerts, brandHealth, lastWeekDate }) {
   const wb = XLSX.utils.book_new();
 
-  // ── 1. ALERTAS OPERATIVAS ────────────────────────────────────────────────
+  // ── 1. ALERTAS OPERATIVAS ─────────────────────────────────────────────────
   const opRows = [];
   opRows.push([
-    'Tipo de Alerta', 'Severidad', 'Campaña', 'KPI Afectado',
-    'Valor Última Semana', 'Media 8 Semanas', 'Media 4 Semanas Previas',
-    'Δ vs Media 8S', 'Δ vs Media 4S', 'Umbral'
+    'Tipo de Alerta',
+    'Severidad',
+    'Campaña',
+    'KPI Afectado',
+    'Media Impr. 4S',
+    'Valor Última Semana',
+    'Media Ponderada Global',
+    'Media Ponderada 4S Previas',
+    'Δ vs Media Global',
+    'Δ vs Media 4S',
+    'Umbral',
   ]);
 
   operativeAlerts.forEach(cd => {
@@ -21,6 +27,7 @@ export function downloadReport({ operativeAlerts, brandHealth, allWeeks, lastWee
         alert.severity === 'critical' ? 'CRÍTICO' : 'ALERTA',
         cd.campana,
         alert.label,
+        cd.imprMedia4S ?? '—',
         fmtPct(alert.lastVal),
         fmtPct(alert.avg8),
         fmtPct(alert.avg4),
@@ -32,21 +39,21 @@ export function downloadReport({ operativeAlerts, brandHealth, allWeeks, lastWee
   });
 
   if (opRows.length === 1) {
-    opRows.push(['Sin alertas operativas esta semana', '', '', '', '', '', '', '', '', '']);
+    opRows.push(['Sin alertas operativas esta semana', '', '', '', '', '', '', '', '', '', '']);
   }
 
   const wsOp = XLSX.utils.aoa_to_sheet(opRows);
-  wsOp['!cols'] = [28, 12, 42, 28, 20, 18, 22, 14, 14, 10].map(w => ({ wch: w }));
+  wsOp['!cols'] = [28, 12, 42, 28, 14, 20, 22, 24, 14, 14, 10].map(w => ({ wch: w }));
   XLSX.utils.book_append_sheet(wb, wsOp, 'Alertas Operativas');
 
-  // ── 2. SALUD ESTRUCTURAL DE MARCA ────────────────────────────────────────
+  // ── 2. SALUD ESTRUCTURAL DE MARCA ─────────────────────────────────────────
   const bhRows = [];
   bhRows.push([
     'Estado', 'Campaña',
     'Cuota Imp. Búsqueda', 'Estado IS',
     'Cuota Imp. Parte Sup.', 'Estado IS Top',
     'Imp. Perd. Ranking', 'Estado Ranking',
-    'Condiciones Fallidas'
+    'Condiciones Fallidas',
   ]);
 
   brandHealth.forEach(cd => {
@@ -54,9 +61,9 @@ export function downloadReport({ operativeAlerts, brandHealth, allWeeks, lastWee
     const isTop = cd.conditions.find(c => c.kpi === 'isTop');
     const rank  = cd.conditions.find(c => c.kpi === 'lostRank');
 
-    const statusLabel = cd.status === 'ok' ? '✅ SALUDABLE'
-      : cd.status === 'critical'           ? '🔴 CRÍTICO'
-      :                                      '⚠️ DÉBIL';
+    const statusLabel = cd.status === 'ok'       ? '✅ SALUDABLE'
+      : cd.status === 'critical'                 ? '🔴 CRÍTICO'
+      :                                            '⚠️ DÉBIL';
 
     bhRows.push([
       statusLabel,
@@ -75,13 +82,13 @@ export function downloadReport({ operativeAlerts, brandHealth, allWeeks, lastWee
   wsBH['!cols'] = [16, 42, 22, 18, 22, 18, 22, 18, 36].map(w => ({ wch: w }));
   XLSX.utils.book_append_sheet(wb, wsBH, 'Salud Estructural Marca');
 
-  // ── 3. RESUMEN EJECUTIVO ─────────────────────────────────────────────────
+  // ── 3. RESUMEN EJECUTIVO ──────────────────────────────────────────────────
   const lastWeekStr = lastWeekDate
     ? `${lastWeekDate.getDate().toString().padStart(2,'0')}/${(lastWeekDate.getMonth()+1).toString().padStart(2,'0')}/${lastWeekDate.getFullYear()}`
     : '—';
 
   const summaryRows = [
-    ['VISIBILITY RADAR — REPORTE SEMANAL SEM'],
+    ['COMPETITIVITY — REPORTE SEMANAL SEM'],
     [''],
     ['Generado el:', new Date().toLocaleString('es-ES')],
     ['Última semana analizada:', lastWeekStr],
@@ -97,7 +104,7 @@ export function downloadReport({ operativeAlerts, brandHealth, allWeeks, lastWee
     ['Campañas con branding débil:', brandHealth.filter(b => b.isWeakBrand).length],
     ['Campañas en estado crítico:', brandHealth.filter(b => b.status === 'critical').length],
     [''],
-    ['DETALLE ALERTAS OPERATIVAS POR TIPO'],
+    ['DETALLE ALERTAS POR TIPO'],
     ['Caída Cuota Imp. Búsqueda (> -10pp):', operativeAlerts.filter(a => a.alerts.some(al => al.type === 'IS_DROP')).length],
     ['Caída Cuota Imp. Abs. Top (> -15pp):', operativeAlerts.filter(a => a.alerts.some(al => al.type === 'IS_ABS_TOP_DROP')).length],
   ];
@@ -106,7 +113,6 @@ export function downloadReport({ operativeAlerts, brandHealth, allWeeks, lastWee
   wsSummary['!cols'] = [38, 24].map(w => ({ wch: w }));
   XLSX.utils.book_append_sheet(wb, wsSummary, 'Resumen Ejecutivo');
 
-  // Download
   const date = new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(wb, `visibility-radar-reporte-${date}.xlsx`);
+  XLSX.writeFile(wb, `competitivity-reporte-${date}.xlsx`);
 }
