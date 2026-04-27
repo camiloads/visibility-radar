@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { parseRows, analyzeData } from '../utils/analysis.js';
-import { Upload, FileSpreadsheet, AlertCircle, Zap } from 'lucide-react';
+import { Upload, AlertCircle } from 'lucide-react';
 
 function parseTSVorCSV(text) {
   const firstLine = text.split('\n')[0] || '';
@@ -57,7 +57,6 @@ export default function UploadPage({ onDataLoaded }) {
       if (ext === 'xlsx' || ext === 'xls') {
         rawRows = await readExcel(file);
       } else {
-        // Try UTF-16 first (Google Ads export), fallback to UTF-8
         let text = await readAsText(file, 'UTF-16LE');
         const nulls = (text.match(/\x00/g) || []).length;
         if (nulls > text.length * 0.1 || text.trim() === '') {
@@ -87,13 +86,17 @@ export default function UploadPage({ onDataLoaded }) {
 
   return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '40px 20px' }}>
+
+      {/* Header */}
       <div style={{ textAlign: 'center', marginBottom: 48 }} className="fade-in">
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginBottom: 16 }}>
-          <div style={{ width: 48, height: 48, borderRadius: '12px', background: 'linear-gradient(135deg, var(--accent), #0088aa)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 0 32px var(--accent-glow)' }}>
-            <Zap size={24} color="#000" />
-          </div>
-          <h1 className="display" style={{ fontSize: 32, fontWeight: 800, letterSpacing: '-0.02em' }}>
-            Competitivity
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 14, marginBottom: 16 }}>
+          <img
+            src="/Logo-VRadar.png"
+            alt="VRadar logo"
+            style={{ width: 52, height: 52, objectFit: 'contain', filter: 'drop-shadow(0 0 12px rgba(0,212,255,0.4))' }}
+          />
+          <h1 className="display" style={{ fontSize: 36, fontWeight: 800, letterSpacing: '-0.02em' }}>
+            V<span className="text-accent">Radar</span>
           </h1>
         </div>
         <p style={{ color: 'var(--text-secondary)', fontFamily: 'var(--font-mono)', fontSize: 13, letterSpacing: '0.04em' }}>
@@ -101,6 +104,7 @@ export default function UploadPage({ onDataLoaded }) {
         </p>
       </div>
 
+      {/* Upload card */}
       <div className="card fade-in-delay-1" style={{ width: '100%', maxWidth: 560 }}>
         <div
           className={`upload-zone${dragging ? ' drag-over' : ''}`}
@@ -139,23 +143,12 @@ export default function UploadPage({ onDataLoaded }) {
             <p style={{ color: 'var(--danger)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>{error}</p>
           </div>
         )}
-
-        <div style={{ marginTop: 20, padding: '14px 16px', background: 'var(--bg-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border)' }}>
-          <p style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>Formato esperado</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            {[['Semana','Fecha inicio de semana natural (Lunes)'],['Campaña','Nombre de la campaña'],['Impr. / Coste','KPIs de volumen'],['Cuotas de imp.','4 columnas de share of voice'],['Imp. perdidas','Presupuesto + Ranking']].map(([k,v]) => (
-              <div key={k} style={{ display: 'flex', gap: 10 }}>
-                <span className="mono" style={{ color: 'var(--accent)', fontSize: 11, minWidth: 120 }}>{k}</span>
-                <span style={{ color: 'var(--text-secondary)', fontSize: 11 }}>{v}</span>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
 
       <p className="fade-in-delay-2" style={{ marginTop: 32, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11, textAlign: 'center' }}>
         Los archivos se procesan localmente · Sin envío de datos al servidor
       </p>
+
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
 
       {/* Footer */}
@@ -170,7 +163,7 @@ export default function UploadPage({ onDataLoaded }) {
         fontFamily: 'var(--font-mono)',
         fontSize: '12px',
       }}>
-        Visibility Radar · 2026 by Camilo Soler
+        VRadar · 2026 by Camilo Soler
       </footer>
     </div>
   );

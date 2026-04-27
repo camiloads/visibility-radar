@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Zap, AlertTriangle, Shield, Download, RefreshCw, FileSpreadsheet } from 'lucide-react';
+import { AlertTriangle, Shield, Download, RefreshCw, FileSpreadsheet } from 'lucide-react';
 import UploadPage     from './pages/UploadPage.jsx';
 import OperativePage  from './pages/OperativePage.jsx';
 import BrandHealthPage from './pages/BrandHealthPage.jsx';
@@ -52,13 +52,13 @@ export default function App() {
       count: operativeAlerts.length,
       countColor: operativeAlerts.length > 0 ? 'var(--danger)' : 'var(--success)',
     },
-    {
-      id: 'brand',
-      label: 'Salud de Marca',
-      icon: Shield,
-      count: weakBrands,
-      countColor: weakBrands > 0 ? 'var(--warning)' : 'var(--success)',
-    },
+    // {
+    //   id: 'brand',
+    //   label: 'Salud de Marca',
+    //   icon: Shield,
+    //   count: weakBrands,
+    //   countColor: weakBrands > 0 ? 'var(--warning)' : 'var(--success)',
+    // },
   ];
 
   return (
@@ -79,10 +79,14 @@ export default function App() {
               background: 'linear-gradient(135deg, var(--accent), #0088aa)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
-              <Zap size={14} color="#000" />
+             <img
+              src="/Logo-VRadar.png"
+              alt="VRadar logo"
+              style={{ width: 28, height: 28, objectFit: 'contain', filter: 'drop-shadow(0 0 8px rgba(0,212,255,0.4))' }}
+            />
             </div>
             <span className="display" style={{ fontSize: 16, fontWeight: 800, letterSpacing: '-0.02em' }}>
-              Visibility <span className="text-accent">Radar</span>
+              V<span className="text-accent">Radar</span>
             </span>
           </div>
 
@@ -166,7 +170,7 @@ export default function App() {
 
         {/* Page content */}
         {activeTab === 'operative' && <OperativePage  data={analysisData} />}
-        {activeTab === 'brand'     && <BrandHealthPage data={analysisData} />}
+        {/* {activeTab === 'brand' && <BrandHealthPage data={analysisData} />} */}
    </main>
 
       {/* Footer */}
